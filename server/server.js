@@ -3,9 +3,62 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const path = require('path');
+const cors = require('cors');
+
+// Load environment variables
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Serve static files in production
+if (NODE_ENV === 'production') {
+  // Serve dashboard static files
+  app.use('/dashboard', express.static(path.join(__dirname, '../dashboard/build')));
+  
+  // Serve mobile static files  
+  app.use('/mobile', express.static(path.join(__dirname, '../mobile/build')));
+  
+  // Serve dashboard at root
+  app.use('/', express.static(path.join(__dirname, '../dashboard/build')));
+  
+  // Handle client-side routing
+  app.get('/dashboard/*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../dashboard/build/index.html'));
+  });
+  
+  app.get('/mobile/*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../mobile/build/index.html'));
+  });
+  
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../dashboard/build/index.html'));
+  });
+}
+
+// API routes
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    environment: NODE_ENV,
+    players: gameState.currentGame.players.length,
+    gameState: gameState.currentGame.state
+  });
+});
+
+app.get('/api/game-info', (req, res) => {
+  res.json({
+    totalQuestions: questions.questions ? questions.questions.length : 0,
+    currentQuestion: gameState.currentGame.currentQuestionIndex,
+    gameState: gameState.currentGame.state,
+    playerCount: gameState.currentGame.players.length
+  });
+});
 
 // Create HTTP server
 const server = require('http').createServer(app);
@@ -28,7 +81,14 @@ function loadGameData() {
     gameState = JSON.parse(fs.readFileSync(gameStatePath, 'utf8'));
     questions = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
     
+    // Use environment variables for configuration
+    gameState.hostCode = process.env.HOST_CODE || 'ADMIN123';
+    gameState.gameSettings.questionTimer = parseInt(process.env.QUESTION_TIMER_DEFAULT) || 30;
+    
     console.log('Game data loaded successfully');
+    console.log(`Host code: ${gameState.hostCode}`);
+    console.log(`Question timer: ${gameState.gameSettings.questionTimer}s`);
+    console.log(`Total questions: ${questions.questions.length}`);
   } catch (error) {
     console.error('Error loading game data:', error);
   }
@@ -137,53 +197,44 @@ wss.on('connection', (ws) => {
 function handleHostAuth(ws, data) {
   if (data.hostCode === gameState.hostCode) {
     hostConnection = ws;
-    ws.send(JSON.stringify({ 
-      event: 'host_authenticated', 
-      data: { success: true } 
+    ws.send(JSON.stringify({
+      event: 'host_authenticated',
+      data: { success: true }
     }));
-    console.log('Host authenticated');
     
-    // Send current game state to host
+    // Send current players
     sendToHost('players_update', { players: gameState.currentGame.players });
+    console.log('Host authenticated');
   } else {
-    ws.send(JSON.stringify({ 
-      event: 'host_authenticated', 
-      data: { success: false } 
+    ws.send(JSON.stringify({
+      event: 'host_authenticated',
+      data: { success: false }
     }));
   }
 }
 
 function handlePlayerJoin(ws, data) {
-  if (gameState.currentGame.state !== 'lobby') {
-    ws.send(JSON.stringify({ 
-      event: 'error', 
-      data: { message: 'Game is in progress' } 
-    }));
-    return;
-  }
-
   const playerId = uuidv4();
   const player = {
     id: playerId,
     name: data.playerName,
-    score: 0,
-    connected: true
+    score: 0
   };
-
+  
   gameState.currentGame.players.push(player);
   playerConnections.set(playerId, ws);
-  
   saveGameState();
   
-  // Send game state to player
-  ws.send(JSON.stringify({ 
-    event: 'game_state', 
+  // Send game state to new player
+  ws.send(JSON.stringify({
+    event: 'game_state',
     data: { 
-      state: gameState.currentGame.state, 
-      players: gameState.currentGame.players 
-    } 
+      state: gameState.currentGame.state,
+      players: gameState.currentGame.players
+    }
   }));
   
+  // Update all clients
   broadcastPlayersUpdate();
   console.log('Player joined:', data.playerName);
 }
@@ -192,11 +243,6 @@ function handleStartGame() {
   gameState.currentGame.state = 'in_progress';
   gameState.currentGame.currentQuestionIndex = 0;
   saveGameState();
-  
-  broadcastToPlayers('game_state', { 
-    state: 'in_progress', 
-    players: gameState.currentGame.players 
-  });
   
   console.log('Game started');
 }
@@ -208,6 +254,7 @@ function handleNextQuestion() {
     const question = questions.questions[questionIndex];
     gameState.currentGame.questionStartTime = Date.now();
     gameState.currentGame.currentAnswers = [];
+    gameState.currentGame.currentQuestionIndex++;
     saveGameState();
     
     broadcastToPlayers('question', { 
@@ -217,25 +264,12 @@ function handleNextQuestion() {
     
     console.log('Sent question:', question.question);
   } else {
-    // Game ended - show final results
-    gameState.currentGame.state = 'ended';
-    saveGameState();
-    
-    broadcastToPlayers('final_results', { 
-      finalScores: gameState.currentGame.players 
-    });
-    
-    // Send game_ended event to host
-    sendToHost('game_ended', { 
-      finalScores: gameState.currentGame.players 
-    });
-    
-    console.log('Game ended - final results sent');
+    handleEndGame();
   }
 }
 
 function handleSubmitAnswer(ws, data) {
-  // Find player ID from connection
+  // Find player
   let playerId = null;
   for (let [id, connection] of playerConnections) {
     if (connection === ws) {
@@ -246,11 +280,8 @@ function handleSubmitAnswer(ws, data) {
   
   if (!playerId) return;
   
-  // Check if answer already submitted
-  const existingAnswer = gameState.currentGame.currentAnswers.find(
-    answer => answer.playerId === playerId
-  );
-  
+  // Check if already answered
+  const existingAnswer = gameState.currentGame.currentAnswers.find(a => a.playerId === playerId);
   if (existingAnswer) return;
   
   // Add answer
@@ -262,35 +293,50 @@ function handleSubmitAnswer(ws, data) {
   
   saveGameState();
   
-  // Update host with answer count
+  // Update host
   sendToHost('answers_update', {
     answers: gameState.currentGame.currentAnswers,
     totalPlayers: gameState.currentGame.players.length
   });
-  
-  console.log('Answer submitted by player:', playerId);
 }
 
 function handleShowResults() {
-  const currentQuestion = questions.questions[gameState.currentGame.currentQuestionIndex];
+  const currentQuestionIndex = gameState.currentGame.currentQuestionIndex - 1;
+  const question = questions.questions[currentQuestionIndex];
+  
+  if (!question) return;
   
   // Calculate scores
   gameState.currentGame.currentAnswers.forEach(answer => {
-    const player = gameState.currentGame.players.find(p => p.id === answer.playerId);
-    if (player && isCorrectAnswer(answer.answer, currentQuestion.correct_answer)) {
-      player.score += 1;
+    if (answer.answer.toLowerCase() === question.correct_answer.toLowerCase()) {
+      const player = gameState.currentGame.players.find(p => p.id === answer.playerId);
+      if (player) {
+        player.score += question.points || 10;
+      }
     }
   });
   
-  gameState.currentGame.currentQuestionIndex += 1;
   saveGameState();
   
   broadcastToPlayers('question_results', {
-    correctAnswer: currentQuestion.correct_answer,
+    correctAnswer: question.correct_answer,
     scores: gameState.currentGame.players
   });
+}
+
+function handleEndGame() {
+  gameState.currentGame.state = 'ended';
+  saveGameState();
   
-  console.log('Results shown for question:', currentQuestion.question);
+  broadcastToPlayers('final_results', { 
+    finalScores: gameState.currentGame.players 
+  });
+  
+  sendToHost('game_ended', { 
+    finalScores: gameState.currentGame.players 
+  });
+  
+  console.log('Game ended');
 }
 
 function handleResetGame() {
@@ -304,43 +350,36 @@ function handleResetGame() {
   
   saveGameState();
   
-  // Broadcast reset to all players - they should return to join screen
+  // Clear player connections but keep them connected
+  playerConnections.clear();
+  
+  // Broadcast reset to all players
   broadcastToPlayers('game_reset', {});
   
   // Update host
   sendToHost('players_update', { players: [] });
   
-  console.log('Game reset - all players cleared');
-}
-
-function handleEndGame() {
-  gameState.currentGame.state = 'ended';
-  saveGameState();
-  
-  broadcastToPlayers('final_results', { 
-    finalScores: gameState.currentGame.players 
-  });
-  
-  // Send game_ended event to host
-  sendToHost('game_ended', { 
-    finalScores: gameState.currentGame.players 
-  });
-  
-  console.log('Game manually ended by host');
+  console.log('Game reset');
 }
 
 function broadcastPlayersUpdate() {
   sendToHost('players_update', { players: gameState.currentGame.players });
 }
 
-function isCorrectAnswer(playerAnswer, correctAnswer) {
-  return playerAnswer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
-}
-
 // Start server
 loadGameData();
 
 server.listen(PORT, () => {
-  console.log(`Trivia game server running on port ${PORT}`);
-  console.log(`WebSocket server ready for connections`);
+  console.log(`🎯 Trivia Game Server running on port ${PORT}`);
+  console.log(`📱 Environment: ${NODE_ENV}`);
+  
+  if (NODE_ENV === 'production') {
+    console.log(`🌐 Dashboard: http://localhost:${PORT}`);
+    console.log(`📱 Mobile: http://localhost:${PORT}/mobile`);
+  } else {
+    console.log(`🌐 Dashboard: http://localhost:3000`);
+    console.log(`📱 Mobile: http://localhost:3002`);
+  }
+  
+  console.log(`🔌 WebSocket server ready for connections`);
 });

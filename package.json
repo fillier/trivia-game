@@ -1,0 +1,17 @@
+{
+  "name": "trivia-game",
+  "version": "1.0.0",
+  "description": "Real-time multiplayer trivia game",
+  "scripts": {
+    "start": "cd server && npm start",
+    "dev": "npm run dev:server & npm run dev:dashboard & npm run dev:mobile",
+    "dev:server": "cd server && npm run dev",
+    "dev:dashboard": "cd dashboard && npm start",
+    "dev:mobile": "cd mobile && npm start",
+    "build": "./build.sh",
+    "install:all": "cd server && npm install && cd ../dashboard && npm install && cd ../mobile && npm install"
+  },
+  "keywords": ["trivia", "game", "websocket", "react"],
+  "author": "",
+  "license": "ISC"
+}

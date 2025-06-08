@@ -6,7 +6,16 @@ import QuestionControl from './components/QuestionControl';
 import Results from './components/Results';
 
 function App() {
-  const { isConnected, lastMessage, sendMessage } = useWebSocket('ws://localhost:3001');
+  // Determine WebSocket URL based on environment
+  const getWebSocketUrl = () => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = process.env.NODE_ENV === 'production' 
+      ? window.location.host 
+      : 'localhost:3001';
+    return `${protocol}//${host}`;
+  };
+
+  const { isConnected, lastMessage, sendMessage } = useWebSocket(getWebSocketUrl());
   
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [gameState, setGameState] = useState('auth'); // auth, lobby, game, results

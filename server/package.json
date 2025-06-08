@@ -5,13 +5,18 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "build": "npm run build:dashboard && npm run build:mobile",
+    "build:dashboard": "cd ../dashboard && npm run build",
+    "build:mobile": "cd ../mobile && npm run build",
+    "install:all": "npm install && cd ../dashboard && npm install && cd ../mobile && npm install"
   },
   "dependencies": {
     "ws": "^8.x",
     "express": "^4.x",
     "uuid": "^9.x",
-    "cors": "^2.x"
+    "cors": "^2.x",
+    "dotenv": "^16.x"
   },
   "keywords": [
     "trivia",
