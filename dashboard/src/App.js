@@ -92,6 +92,12 @@ function App() {
         setShownHints(0);
         break;
         
+      // Add a new case in the useEffect message handling
+      case 'results_reshown':
+        console.log('Results were already shown:', data.message);
+        // You could show a toast or brief message to the host
+        break;
+        
       default:
         console.log('Unhandled dashboard event:', event, data);
     }

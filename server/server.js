@@ -110,9 +110,10 @@ function loadGameData() {
     gameState = JSON.parse(fs.readFileSync(gameStatePath, 'utf8'));
     questions = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
     
-    // Initialize hint tracking
+    // Initialize hint tracking and results tracking
     gameState.currentGame.currentHintIndex = 0;
     gameState.currentGame.shownHints = [];
+    gameState.currentGame.resultsShown = false; // Add this flag
     
     gameState.hostCode = process.env.HOST_CODE || 'ADMIN123';
     gameState.gameSettings.questionTimer = parseInt(process.env.QUESTION_TIMER_DEFAULT) || 30;
@@ -316,16 +317,17 @@ function handleNextQuestion() {
     gameState.currentGame.currentAnswers = [];
     gameState.currentGame.currentQuestionIndex++;
     
-    // Reset hints for new question
+    // Reset hints and results for new question
     gameState.currentGame.currentHintIndex = 0;
     gameState.currentGame.shownHints = [];
+    gameState.currentGame.resultsShown = false; // Reset results flag
     
     saveGameState();
     
     broadcastToPlayers('question', { 
       question, 
       timeLimit: gameState.gameSettings.questionTimer,
-      hints: [] // Start with no hints shown
+      hints: []
     });
     
     // Send hint availability to host
@@ -374,20 +376,48 @@ function handleSubmitAnswer(ws, data) {
 }
 
 function handleShowResults() {
+  // Check if results have already been shown for this question
+  if (gameState.currentGame.resultsShown) {
+    console.log('Results already shown for this question - skipping score calculation');
+    
+    // Just re-broadcast the results without recalculating scores
+    const currentQuestionIndex = gameState.currentGame.currentQuestionIndex - 1;
+    const question = questions.questions[currentQuestionIndex];
+    
+    if (question) {
+      broadcastToPlayers('question_results', {
+        correctAnswer: question.correct_answer,
+        scores: gameState.currentGame.players
+      });
+      
+      sendToHost('results_reshown', {
+        message: 'Results already calculated for this question'
+      });
+    }
+    return;
+  }
+  
   const currentQuestionIndex = gameState.currentGame.currentQuestionIndex - 1;
   const question = questions.questions[currentQuestionIndex];
   
   if (!question) return;
   
-  // Calculate scores
+  console.log('Calculating scores for question:', question.question);
+  
+  // Calculate scores (only runs once per question now)
   gameState.currentGame.currentAnswers.forEach(answer => {
     if (answer.answer.toLowerCase() === question.correct_answer.toLowerCase()) {
       const player = gameState.currentGame.players.find(p => p.id === answer.playerId);
       if (player) {
-        player.score += question.points || 10;
+        const pointsAwarded = question.points || 10;
+        player.score += pointsAwarded;
+        console.log(`Awarded ${pointsAwarded} points to ${player.name}`);
       }
     }
   });
+  
+  // Mark results as shown to prevent duplicate scoring
+  gameState.currentGame.resultsShown = true;
   
   saveGameState();
   
@@ -395,6 +425,8 @@ function handleShowResults() {
     correctAnswer: question.correct_answer,
     scores: gameState.currentGame.players
   });
+  
+  console.log('Results calculated and shown for the first time');
 }
 
 function handleEndGame() {
@@ -415,7 +447,6 @@ function handleEndGame() {
 function handleResetGame() {
   console.log('Resetting game...');
   
-  // Store current player connections before clearing
   const currentPlayerConnections = new Map(playerConnections);
   
   gameState.currentGame = {
@@ -423,12 +454,14 @@ function handleResetGame() {
     currentQuestionIndex: 0,
     questionStartTime: null,
     players: [],
-    currentAnswers: []
+    currentAnswers: [],
+    currentHintIndex: 0,
+    shownHints: [],
+    resultsShown: false // Reset results flag
   };
   
   saveGameState();
   
-  // Send reset to all currently connected players
   console.log(`Sending reset to ${currentPlayerConnections.size} players`);
   currentPlayerConnections.forEach((ws, playerId) => {
     if (ws.readyState === WebSocket.OPEN) {
@@ -440,13 +473,10 @@ function handleResetGame() {
     }
   });
   
-  // Clear player connections after sending reset
   playerConnections.clear();
   
-  // Update host with empty players list
   sendToHost('players_update', { players: [] });
   
-  // Send explicit reset confirmation to host
   setTimeout(() => {
     sendToHost('game_reset_complete', {});
   }, 100);

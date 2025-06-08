@@ -11,8 +11,16 @@ const GameActive = ({
   onResetGame,
   onShowHint 
 }) => {
+  const [showResultsClicked, setShowResultsClicked] = useState(false);
   const totalPlayers = players.length;
   const answersReceived = answers.length;
+  
+  const handleShowResults = () => {
+    setShowResultsClicked(true);
+    onShowResults();
+    // Reset the flag after a few seconds
+    setTimeout(() => setShowResultsClicked(false), 3000);
+  };
   
   return (
     <div className="card">
@@ -95,11 +103,11 @@ const GameActive = ({
         </button>
         
         <button 
-          className="btn btn-success"
-          onClick={onShowResults}
+          className={`btn ${showResultsClicked ? 'btn-warning' : 'btn-success'}`}
+          onClick={handleShowResults}
           disabled={answersReceived === 0}
         >
-          Show Results
+          {showResultsClicked ? 'Results Already Shown' : 'Show Results'}
         </button>
         
         <button 
@@ -109,6 +117,20 @@ const GameActive = ({
           Reset Game
         </button>
       </div>
+      
+      {showResultsClicked && (
+        <div style={{ 
+          marginTop: '12px', 
+          padding: '8px', 
+          backgroundColor: '#fff3cd', 
+          border: '1px solid #ffeaa7',
+          borderRadius: '4px',
+          fontSize: '14px',
+          color: '#856404'
+        }}>
+          ℹ️ Note: Scores are only calculated once per question to prevent duplication
+        </div>
+      )}
     </div>
   );
 };
