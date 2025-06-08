@@ -265,18 +265,31 @@ function handlePlayerJoin(ws, data) {
   playerConnections.set(playerId, ws);
   saveGameState();
   
-  // Send game state to new player
+  console.log('Player joined:', data.playerName, 'ID:', playerId);
+  
+  // Send game state to new player (this is what was missing!)
   ws.send(JSON.stringify({
     event: 'game_state',
     data: { 
       state: gameState.currentGame.state,
-      players: gameState.currentGame.players
+      players: gameState.currentGame.players,
+      playerCount: gameState.currentGame.players.length
     }
   }));
   
-  // Update all clients
+  // Also send a join confirmation
+  ws.send(JSON.stringify({
+    event: 'join_confirmed',
+    data: {
+      playerId: playerId,
+      playerName: data.playerName
+    }
+  }));
+  
+  // Update host and other clients
   broadcastPlayersUpdate();
-  console.log('Player joined:', data.playerName);
+  
+  console.log('Game state sent to new player');
 }
 
 function handleStartGame() {
@@ -380,6 +393,11 @@ function handleEndGame() {
 }
 
 function handleResetGame() {
+  console.log('Resetting game...');
+  
+  // Store current player connections before clearing
+  const currentPlayerConnections = new Map(playerConnections);
+  
   gameState.currentGame = {
     state: 'lobby',
     currentQuestionIndex: 0,
@@ -390,16 +408,30 @@ function handleResetGame() {
   
   saveGameState();
   
-  // Clear player connections but keep them connected
+  // Send reset to all currently connected players
+  console.log(`Sending reset to ${currentPlayerConnections.size} players`);
+  currentPlayerConnections.forEach((ws, playerId) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        event: 'game_reset',
+        data: {}
+      }));
+      console.log(`Reset sent to player: ${playerId}`);
+    }
+  });
+  
+  // Clear player connections after sending reset
   playerConnections.clear();
   
-  // Broadcast reset to all players
-  broadcastToPlayers('game_reset', {});
-  
-  // Update host
+  // Update host with empty players list
   sendToHost('players_update', { players: [] });
   
-  console.log('Game reset');
+  // Send explicit reset confirmation to host
+  setTimeout(() => {
+    sendToHost('game_reset_complete', {});
+  }, 100);
+  
+  console.log('Game reset complete - all players notified');
 }
 
 function broadcastPlayersUpdate() {

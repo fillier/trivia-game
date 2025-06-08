@@ -48,6 +48,10 @@ function App() {
       case 'players_update':
         console.log('Players update:', data.players);
         setPlayers(data.players || []);
+        // If no players and we're in active state, go back to lobby
+        if ((data.players || []).length === 0 && gameState === 'active') {
+          setGameState('lobby');
+        }
         break;
         
       case 'answers_update':
@@ -60,10 +64,20 @@ function App() {
         setScores(data.finalScores || []);
         break;
         
+      // Add explicit handling for game reset from server side
+      case 'game_reset_complete':
+        console.log('Game reset - returning to lobby');
+        setGameState('lobby');
+        setPlayers([]);
+        setAnswers([]);
+        setScores([]);
+        setCurrentQuestion(null);
+        break;
+        
       default:
         console.log('Unhandled dashboard event:', event, data);
     }
-  }, [lastMessage]);
+  }, [lastMessage, gameState]);
 
   // Debug: Log authentication state changes
   useEffect(() => {
@@ -108,7 +122,10 @@ function App() {
   };
 
   const handleResetGame = () => {
+    console.log('Initiating game reset...');
     sendMessage('reset_game', {});
+    
+    // Immediately update local state (don't wait for server confirmation)
     setGameState('lobby');
     setPlayers([]);
     setAnswers([]);

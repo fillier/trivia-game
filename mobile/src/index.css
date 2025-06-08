@@ -237,31 +237,70 @@ body {
 }
 
 .scores-list {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   border-radius: 12px;
-  padding: 16px;
+  padding: 20px;
   margin: 16px 0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.scores-list h3 {
+  color: #333;
+  margin-bottom: 16px;
+  text-align: center;
+  font-size: 1.2rem;
 }
 
 .score-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  color: white;
+  padding: 16px;
+  margin: 8px 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+  border: 1px solid #dee2e6;
+  color: #333;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
-.score-item:last-child {
-  border-bottom: none;
+.score-item:first-child {
+  background: linear-gradient(135deg, #ffd700, #ffed4e);
+  border-color: #f1c40f;
+  color: #2c3e50;
+  font-weight: bold;
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(241, 196, 15, 0.3);
+}
+
+.score-item:nth-child(2) {
+  background: linear-gradient(135deg, #e8e8e8, #d5d5d5);
+  border-color: #bdc3c7;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.score-item:nth-child(3) {
+  background: linear-gradient(135deg, #cd7f32, #b8860b);
+  border-color: #a0522d;
+  color: white;
+  font-weight: 600;
 }
 
 .score-item.current-player {
-  background: rgba(255, 193, 7, 0.2);
-  border-radius: 8px;
-  padding: 12px;
-  margin: 4px 0;
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  border-color: #004085;
+  color: white;
+  font-weight: bold;
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+  transform: scale(1.02);
+}
+
+.score-item.current-player::before {
+  content: "👤 ";
+  margin-right: 4px;
 }
 
 .waiting-message {

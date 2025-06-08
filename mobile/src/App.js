@@ -36,14 +36,23 @@ function App() {
   useEffect(() => {
     if (!lastMessage) return;
 
-    console.log('Received message:', lastMessage); // Debug log
+    console.log('Mobile received message:', lastMessage);
     const { event, data } = lastMessage;
     
     switch (event) {
+      case 'join_confirmed':
+        console.log('Join confirmed for player:', data.playerName);
+        // Don't change state here - wait for game_state
+        break;
+        
       case 'game_state':
+        console.log('Game state received:', data);
         if (data.state === 'lobby') {
+          console.log('Moving to lobby state');
           setGameState('lobby');
-          setPlayerCount(data.players.length);
+          setPlayerCount(data.players ? data.players.length : 0);
+        } else if (data.state === 'in_progress') {
+          setGameState('waiting'); // Game already started
         }
         break;
         
@@ -66,6 +75,7 @@ function App() {
         break;
         
       case 'game_reset':
+        console.log('Game reset received - returning to join screen');
         setGameState('join');
         setPlayerName('');
         setCurrentQuestion(null);
@@ -77,17 +87,25 @@ function App() {
         break;
         
       case 'error':
+        console.log('Error received:', data.message);
         alert(data.message);
         break;
         
       default:
-        console.log('Unhandled event:', event, data);
+        console.log('Unhandled mobile event:', event, data);
     }
   }, [lastMessage]);
 
   const handleJoinGame = (name) => {
-    console.log('Joining game with name:', name); // Debug log
+    console.log('Attempting to join game with name:', name);
+    
+    if (!isConnected) {
+      alert('Not connected to server. Please wait...');
+      return;
+    }
+    
     setPlayerName(name);
+    console.log('Sending join_game message');
     sendMessage('join_game', { playerName: name });
   };
 
@@ -101,7 +119,7 @@ function App() {
   };
 
   const renderCurrentView = () => {
-    console.log('Rendering view for state:', gameState); // Debug log
+    console.log('Rendering mobile view for state:', gameState, 'Connected:', isConnected);
     
     switch (gameState) {
       case 'join':
@@ -143,7 +161,15 @@ function App() {
           />
         );
       default:
-        return <div>Loading... (State: {gameState})</div>;
+        return (
+          <div>
+            <div>Loading... (State: {gameState})</div>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              Connected: {isConnected ? 'Yes' : 'No'}<br/>
+              Player: {playerName || 'None'}
+            </div>
+          </div>
+        );
     }
   };
 
