@@ -224,21 +224,32 @@ wss.on('connection', (ws) => {
 
 // Event handlers
 function handleHostAuth(ws, data) {
+  console.log('Host authentication attempt with code:', data.hostCode);
+  console.log('Expected code:', gameState.hostCode);
+  
   if (data.hostCode === gameState.hostCode) {
     hostConnection = ws;
-    ws.send(JSON.stringify({
+    const response = {
       event: 'host_authenticated',
       data: { success: true }
-    }));
+    };
+    console.log('Sending successful auth response:', response);
+    ws.send(JSON.stringify(response));
     
-    // Send current players
-    sendToHost('players_update', { players: gameState.currentGame.players });
-    console.log('Host authenticated');
+    // Send current players immediately after authentication
+    setTimeout(() => {
+      sendToHost('players_update', { players: gameState.currentGame.players });
+    }, 100);
+    
+    console.log('Host authenticated successfully');
   } else {
-    ws.send(JSON.stringify({
+    const response = {
       event: 'host_authenticated',
       data: { success: false }
-    }));
+    };
+    console.log('Sending failed auth response:', response);
+    ws.send(JSON.stringify(response));
+    console.log('Host authentication failed - invalid code');
   }
 }
 

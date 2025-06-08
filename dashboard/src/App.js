@@ -33,21 +33,25 @@ function App() {
     
     switch (event) {
       case 'host_authenticated':
+        console.log('Processing host_authenticated event:', data);
         setAuthAttempting(false);
         if (data.success) {
+          console.log('Setting isAuthenticated to true');
           setIsAuthenticated(true);
-          console.log('Host authentication successful');
         } else {
+          console.log('Authentication failed');
           setIsAuthenticated(false);
           alert('Invalid host code');
         }
         break;
         
       case 'players_update':
+        console.log('Players update:', data.players);
         setPlayers(data.players || []);
         break;
         
       case 'answers_update':
+        console.log('Answers update:', data.answers);
         setAnswers(data.answers || []);
         break;
         
@@ -61,6 +65,11 @@ function App() {
     }
   }, [lastMessage]);
 
+  // Debug: Log authentication state changes
+  useEffect(() => {
+    console.log('Authentication state changed:', { isAuthenticated, authAttempting });
+  }, [isAuthenticated, authAttempting]);
+
   // Handle authentication
   const handleAuthentication = (hostCode) => {
     if (!isConnected) {
@@ -73,11 +82,15 @@ function App() {
       return;
     }
     
-    console.log('Attempting authentication with code:', hostCode);
+    console.log('Starting authentication with code:', hostCode);
     setAuthAttempting(true);
     setIsAuthenticated(false); // Reset auth state
     
-    sendMessage('host_auth', { hostCode });
+    // Add a small delay to ensure state is updated
+    setTimeout(() => {
+      console.log('Sending host_auth message');
+      sendMessage('host_auth', { hostCode });
+    }, 100);
   };
 
   const handleStartGame = () => {
@@ -104,6 +117,8 @@ function App() {
   };
 
   const renderCurrentView = () => {
+    console.log('Rendering view - isAuthenticated:', isAuthenticated);
+    
     if (!isAuthenticated) {
       return (
         <HostLogin 
@@ -153,11 +168,10 @@ function App() {
           {isConnected ? '✅ Connected to server' : '❌ Connection lost'}
         </div>
         
-        {isAuthenticated && (
-          <div style={{ fontSize: '14px', color: '#666', marginTop: '8px' }}>
-            🎮 Host authenticated | Game state: {gameState} | Players: {players.length}
-          </div>
-        )}
+        {/* Debug info */}
+        <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+          Auth: {isAuthenticated ? 'Yes' : 'No'} | Attempting: {authAttempting ? 'Yes' : 'No'} | State: {gameState} | Players: {players.length}
+        </div>
       </div>
 
       {renderCurrentView()}
