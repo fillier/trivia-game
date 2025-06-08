@@ -5,10 +5,18 @@
     "showScores": true
   },
   "currentGame": {
-    "state": "lobby",
-    "currentQuestionIndex": 0,
-    "questionStartTime": null,
+    "state": "in_progress",
+    "currentQuestionIndex": 5,
+    "questionStartTime": 1749351532364,
     "players": [],
-    "currentAnswers": []
+    "currentAnswers": [
+      {
+        "playerId": "0ae7e000-5aec-4f6c-9aed-751274c94d4a",
+        "answer": "true",
+        "timestamp": 1749351538213
+      }
+    ],
+    "currentHintIndex": 0,
+    "shownHints": []
   }
 }

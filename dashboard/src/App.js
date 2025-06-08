@@ -21,6 +21,8 @@ function App() {
   const [gameState, setGameState] = useState('lobby');
   const [players, setPlayers] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(null);
+  const [availableHints, setAvailableHints] = useState(0);
+  const [shownHints, setShownHints] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [scores, setScores] = useState([]);
 
@@ -54,6 +56,20 @@ function App() {
         }
         break;
         
+      case 'question_started':
+        setCurrentQuestion(data.question);
+        setAvailableHints(data.availableHints);
+        setShownHints(0);
+        break;
+        
+      case 'hint_shown':
+        setShownHints(prev => prev + 1);
+        break;
+        
+      case 'hint_error':
+        alert(data.message);
+        break;
+        
       case 'answers_update':
         console.log('Answers update:', data.answers);
         setAnswers(data.answers || []);
@@ -72,6 +88,8 @@ function App() {
         setAnswers([]);
         setScores([]);
         setCurrentQuestion(null);
+        setAvailableHints(0);
+        setShownHints(0);
         break;
         
       default:
@@ -133,6 +151,10 @@ function App() {
     setCurrentQuestion(null);
   };
 
+  const handleShowHint = () => {
+    sendMessage('show_hint', {});
+  };
+
   const renderCurrentView = () => {
     console.log('Rendering view - isAuthenticated:', isAuthenticated);
     
@@ -159,9 +181,13 @@ function App() {
           <GameActive
             players={players}
             answers={answers}
+            currentQuestion={currentQuestion}
+            availableHints={availableHints}
+            shownHints={shownHints}
             onNextQuestion={handleNextQuestion}
             onShowResults={handleShowResults}
             onResetGame={handleResetGame}
+            onShowHint={handleShowHint}
           />
         );
       case 'results':

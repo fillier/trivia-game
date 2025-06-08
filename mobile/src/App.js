@@ -26,6 +26,7 @@ function App() {
   const [playerCount, setPlayerCount] = useState(0);
   const [scores, setScores] = useState([]);
   const [correctAnswer, setCorrectAnswer] = useState('');
+  const [hints, setHints] = useState([]);
 
   // Debug log for game state changes
   useEffect(() => {
@@ -60,6 +61,7 @@ function App() {
         setCurrentQuestion(data.question);
         setTimeLeft(data.timeLimit);
         setSelectedAnswer(null);
+        setHints(data.hints || []); // Initialize with any existing hints
         setGameState('question');
         break;
         
@@ -84,6 +86,11 @@ function App() {
         setPlayerCount(0);
         setScores([]);
         setCorrectAnswer('');
+        break;
+        
+      case 'hint_revealed':
+        console.log('New hint revealed:', data.hint);
+        setHints(data.allShownHints || []);
         break;
         
       case 'error':
@@ -138,6 +145,7 @@ function App() {
             timeLeft={timeLeft}
             setTimeLeft={setTimeLeft}
             onSubmitAnswer={handleSubmitAnswer}
+            hints={hints}
           />
         );
       case 'waiting':

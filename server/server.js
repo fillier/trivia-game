@@ -110,7 +110,10 @@ function loadGameData() {
     gameState = JSON.parse(fs.readFileSync(gameStatePath, 'utf8'));
     questions = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
     
-    // Use environment variables for configuration
+    // Initialize hint tracking
+    gameState.currentGame.currentHintIndex = 0;
+    gameState.currentGame.shownHints = [];
+    
     gameState.hostCode = process.env.HOST_CODE || 'ADMIN123';
     gameState.gameSettings.questionTimer = parseInt(process.env.QUESTION_TIMER_DEFAULT) || 30;
     
@@ -188,6 +191,10 @@ wss.on('connection', (ws) => {
           
         case 'end_game':
           handleEndGame();
+          break;
+          
+        case 'show_hint':
+          handleShowHint();
           break;
           
         default:
@@ -308,14 +315,27 @@ function handleNextQuestion() {
     gameState.currentGame.questionStartTime = Date.now();
     gameState.currentGame.currentAnswers = [];
     gameState.currentGame.currentQuestionIndex++;
+    
+    // Reset hints for new question
+    gameState.currentGame.currentHintIndex = 0;
+    gameState.currentGame.shownHints = [];
+    
     saveGameState();
     
     broadcastToPlayers('question', { 
       question, 
-      timeLimit: gameState.gameSettings.questionTimer 
+      timeLimit: gameState.gameSettings.questionTimer,
+      hints: [] // Start with no hints shown
+    });
+    
+    // Send hint availability to host
+    sendToHost('question_started', {
+      question,
+      availableHints: question.hints ? question.hints.length : 0
     });
     
     console.log('Sent question:', question.question);
+    console.log('Available hints:', question.hints ? question.hints.length : 0);
   } else {
     handleEndGame();
   }
@@ -432,6 +452,46 @@ function handleResetGame() {
   }, 100);
   
   console.log('Game reset complete - all players notified');
+}
+
+function handleShowHint() {
+  const currentQuestionIndex = gameState.currentGame.currentQuestionIndex - 1;
+  const question = questions.questions[currentQuestionIndex];
+  
+  if (!question || !question.hints) {
+    sendToHost('hint_error', { message: 'No hints available for this question' });
+    return;
+  }
+  
+  const hintIndex = gameState.currentGame.currentHintIndex;
+  
+  if (hintIndex >= question.hints.length) {
+    sendToHost('hint_error', { message: 'No more hints available' });
+    return;
+  }
+  
+  const hint = question.hints[hintIndex];
+  gameState.currentGame.shownHints.push(hint);
+  gameState.currentGame.currentHintIndex++;
+  
+  saveGameState();
+  
+  // Broadcast hint to all players
+  broadcastToPlayers('hint_revealed', {
+    hint: hint,
+    hintNumber: hintIndex + 1,
+    totalHints: question.hints.length,
+    allShownHints: gameState.currentGame.shownHints
+  });
+  
+  // Update host with hint status
+  sendToHost('hint_shown', {
+    hint: hint,
+    hintNumber: hintIndex + 1,
+    remainingHints: question.hints.length - gameState.currentGame.currentHintIndex
+  });
+  
+  console.log(`Hint ${hintIndex + 1} shown: ${hint}`);
 }
 
 function broadcastPlayersUpdate() {

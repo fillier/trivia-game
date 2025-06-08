@@ -5,26 +5,44 @@
       "type": "multiple_choice",
       "question": "What is the capital of France?",
       "options": ["London", "Berlin", "Paris", "Madrid"],
-      "correct_answer": "Paris"
+      "correct_answer": "Paris",
+      "hints": [
+        "It's known as the City of Light",
+        "The Eiffel Tower is located there",
+        "It's also called the City of Love"
+      ]
     },
     {
       "id": 2,
       "type": "true_false",
       "question": "The Earth is flat.",
-      "correct_answer": "false"
+      "correct_answer": "false",
+      "hints": [
+        "Think about what sailors see when ships approach the horizon",
+        "Consider how we have photos from space"
+      ]
     },
     {
       "id": 3,
       "type": "text_input",
       "question": "What year did World War II end?",
-      "correct_answer": "1945"
+      "correct_answer": "1945",
+      "hints": [
+        "It was in the 1940s",
+        "The atomic bombs were dropped in August of this year",
+        "Victory in Europe Day was May 8th of this year"
+      ]
     },
     {
       "id": 4,
       "type": "multiple_choice",
       "question": "Which planet is known as the Red Planet?",
       "options": ["Venus", "Mars", "Jupiter", "Saturn"],
-      "correct_answer": "Mars"
+      "correct_answer": "Mars",
+      "hints": [
+        "It's named after the Roman god of war",
+        "It has two small moons named Phobos and Deimos"
+      ]
     },
     {
       "id": 5,
