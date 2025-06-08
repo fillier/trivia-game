@@ -1,7 +1,7 @@
 import React from 'react';
 
-const Results = ({ finalScores, onResetGame }) => {
-  const sortedScores = [...finalScores].sort((a, b) => b.score - a.score);
+const GameResults = ({ scores, onResetGame }) => {
+  const sortedScores = [...scores].sort((a, b) => b.score - a.score);
 
   return (
     <div className="card">
@@ -11,6 +11,7 @@ const Results = ({ finalScores, onResetGame }) => {
         <h3>Leaderboard:</h3>
         {sortedScores.map((player, index) => {
           const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+          
           return (
             <div key={player.id} className="player-item">
               <span>{medal} {player.name}</span>
@@ -20,11 +21,16 @@ const Results = ({ finalScores, onResetGame }) => {
         })}
       </div>
 
-      <button className="btn btn-primary" onClick={onResetGame}>
-        Start New Game
-      </button>
+      <div className="grid">
+        <button 
+          className="btn btn-primary"
+          onClick={onResetGame}
+        >
+          Start New Game
+        </button>
+      </div>
     </div>
   );
 };
 
-export default Results;
+export default GameResults;

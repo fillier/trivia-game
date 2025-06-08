@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import useWebSocket from './hooks/useWebSocket';
-import HostAuth from './components/HostAuth';
+import HostLogin from './components/HostLogin';
 import GameLobby from './components/GameLobby';
-import QuestionControl from './components/QuestionControl';
-import Results from './components/Results';
+import GameActive from './components/GameActive';
+import GameResults from './components/GameResults';
 
 function App() {
-  // Determine WebSocket URL based on environment
   const getWebSocketUrl = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = process.env.NODE_ENV === 'production' 
@@ -18,107 +17,125 @@ function App() {
   const { isConnected, lastMessage, sendMessage } = useWebSocket(getWebSocketUrl());
   
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [gameState, setGameState] = useState('auth'); // auth, lobby, game, results
+  const [authAttempting, setAuthAttempting] = useState(false);
+  const [gameState, setGameState] = useState('lobby');
   const [players, setPlayers] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(null);
-  const [answersReceived, setAnswersReceived] = useState(0);
-  const [finalScores, setFinalScores] = useState([]);
+  const [answers, setAnswers] = useState([]);
+  const [scores, setScores] = useState([]);
 
   // Handle incoming WebSocket messages
   useEffect(() => {
     if (!lastMessage) return;
 
+    console.log('Dashboard received:', lastMessage);
     const { event, data } = lastMessage;
     
     switch (event) {
       case 'host_authenticated':
+        setAuthAttempting(false);
         if (data.success) {
           setIsAuthenticated(true);
-          setGameState('lobby');
+          console.log('Host authentication successful');
         } else {
+          setIsAuthenticated(false);
           alert('Invalid host code');
         }
         break;
         
       case 'players_update':
-        setPlayers(data.players);
+        setPlayers(data.players || []);
         break;
         
       case 'answers_update':
-        setAnswersReceived(data.answers.length);
+        setAnswers(data.answers || []);
         break;
         
       case 'game_ended':
-        setFinalScores(data.finalScores);
         setGameState('results');
+        setScores(data.finalScores || []);
         break;
         
       default:
-        console.log('Unhandled event:', event, data);
+        console.log('Unhandled dashboard event:', event, data);
     }
   }, [lastMessage]);
 
-  const handleAuth = (hostCode) => {
+  // Handle authentication
+  const handleAuthentication = (hostCode) => {
+    if (!isConnected) {
+      alert('Not connected to server. Please wait...');
+      return;
+    }
+    
+    if (authAttempting) {
+      console.log('Authentication already in progress');
+      return;
+    }
+    
+    console.log('Attempting authentication with code:', hostCode);
+    setAuthAttempting(true);
+    setIsAuthenticated(false); // Reset auth state
+    
     sendMessage('host_auth', { hostCode });
   };
 
   const handleStartGame = () => {
     sendMessage('start_game', {});
-    setGameState('game');
-    setAnswersReceived(0);
+    setGameState('active');
   };
 
   const handleNextQuestion = () => {
     sendMessage('next_question', {});
-    setAnswersReceived(0);
-    setCurrentQuestion(`Question sent to ${players.length} players`);
+    setAnswers([]);
   };
 
   const handleShowResults = () => {
     sendMessage('show_results', {});
   };
 
-  const handleEndGame = () => {
-    sendMessage('end_game', {});
-  };
-
   const handleResetGame = () => {
     sendMessage('reset_game', {});
     setGameState('lobby');
     setPlayers([]);
+    setAnswers([]);
+    setScores([]);
     setCurrentQuestion(null);
-    setAnswersReceived(0);
-    setFinalScores([]);
   };
 
   const renderCurrentView = () => {
     if (!isAuthenticated) {
-      return <HostAuth onAuth={handleAuth} />;
+      return (
+        <HostLogin 
+          onAuthenticate={handleAuthentication}
+          isConnected={isConnected}
+          isAttempting={authAttempting}
+        />
+      );
     }
 
     switch (gameState) {
       case 'lobby':
         return (
-          <GameLobby 
+          <GameLobby
             players={players}
             onStartGame={handleStartGame}
           />
         );
-      case 'game':
+      case 'active':
         return (
-          <QuestionControl
-            currentQuestion={currentQuestion}
-            answersReceived={answersReceived}
-            totalPlayers={players.length}
+          <GameActive
+            players={players}
+            answers={answers}
             onNextQuestion={handleNextQuestion}
             onShowResults={handleShowResults}
-            onEndGame={handleEndGame}
+            onResetGame={handleResetGame}
           />
         );
       case 'results':
         return (
-          <Results
-            finalScores={finalScores}
+          <GameResults
+            scores={scores}
             onResetGame={handleResetGame}
           />
         );
@@ -129,12 +146,18 @@ function App() {
 
   return (
     <div className="container">
-      <h1 className="text-center">🎯 Trivia Game - Host Dashboard</h1>
+      <h1>🎯 Trivia Game Dashboard</h1>
       
       <div className="card">
         <div className={`status ${isConnected ? 'status-connected' : 'status-disconnected'}`}>
-          {isConnected ? '✅ Connected to server' : '❌ Disconnected from server'}
+          {isConnected ? '✅ Connected to server' : '❌ Connection lost'}
         </div>
+        
+        {isAuthenticated && (
+          <div style={{ fontSize: '14px', color: '#666', marginTop: '8px' }}>
+            🎮 Host authenticated | Game state: {gameState} | Players: {players.length}
+          </div>
+        )}
       </div>
 
       {renderCurrentView()}

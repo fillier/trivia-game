@@ -10,15 +10,15 @@ function App() {
   // Determine WebSocket URL based on environment
   const getWebSocketUrl = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = process.env.NODE_ENV === 'production' 
-      ? window.location.host 
-      : 'localhost:3001';
-    return `${protocol}//${host}`;
+    const host = window.location.host; // This will use the current host:port
+    const wsUrl = `${protocol}//${host}`;
+    console.log('WebSocket URL:', wsUrl); // Debug log
+    return wsUrl;
   };
 
   const { isConnected, lastMessage, sendMessage } = useWebSocket(getWebSocketUrl());
   
-  const [gameState, setGameState] = useState('join'); // join, lobby, question, waiting, results, final
+  const [gameState, setGameState] = useState('join');
   const [playerName, setPlayerName] = useState('');
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -27,10 +27,16 @@ function App() {
   const [scores, setScores] = useState([]);
   const [correctAnswer, setCorrectAnswer] = useState('');
 
+  // Debug log for game state changes
+  useEffect(() => {
+    console.log('Game state changed to:', gameState);
+  }, [gameState]);
+
   // Handle incoming WebSocket messages
   useEffect(() => {
     if (!lastMessage) return;
 
+    console.log('Received message:', lastMessage); // Debug log
     const { event, data } = lastMessage;
     
     switch (event) {
@@ -60,7 +66,6 @@ function App() {
         break;
         
       case 'game_reset':
-        // Reset all state and return to join screen
         setGameState('join');
         setPlayerName('');
         setCurrentQuestion(null);
@@ -81,6 +86,7 @@ function App() {
   }, [lastMessage]);
 
   const handleJoinGame = (name) => {
+    console.log('Joining game with name:', name); // Debug log
     setPlayerName(name);
     sendMessage('join_game', { playerName: name });
   };
@@ -95,6 +101,8 @@ function App() {
   };
 
   const renderCurrentView = () => {
+    console.log('Rendering view for state:', gameState); // Debug log
+    
     switch (gameState) {
       case 'join':
         return <JoinGame onJoinGame={handleJoinGame} />;
@@ -135,7 +143,7 @@ function App() {
           />
         );
       default:
-        return <div>Loading...</div>;
+        return <div>Loading... (State: {gameState})</div>;
     }
   };
 
@@ -148,6 +156,10 @@ function App() {
       <div className="card">
         <div className={`status ${isConnected ? 'status-connected' : 'status-disconnected'}`}>
           {isConnected ? '✅ Connected to game' : '❌ Connection lost - Reconnecting...'}
+        </div>
+        {/* Debug info */}
+        <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+          State: {gameState} | Connected: {isConnected ? 'Yes' : 'No'}
         </div>
       </div>
 

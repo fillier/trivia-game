@@ -16,47 +16,76 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 app.use(cors());
 app.use(express.json());
 
+// Set proper MIME types
+express.static.mime.define({
+  'application/javascript': ['js'],
+  'text/css': ['css'],
+  'text/html': ['html']
+});
+
 // Serve static files in production
 if (NODE_ENV === 'production') {
-  // Serve dashboard static files
-  app.use('/dashboard', express.static(path.join(__dirname, '../dashboard/build')));
+  const dashboardBuildPath = path.join(__dirname, '../dashboard/build');
+  const mobileBuildPath = path.join(__dirname, '../mobile/build');
   
-  // Serve mobile static files  
-  app.use('/mobile', express.static(path.join(__dirname, '../mobile/build')));
+  console.log('Checking build paths:');
+  console.log('Dashboard build path:', dashboardBuildPath, 'exists:', fs.existsSync(dashboardBuildPath));
+  console.log('Mobile build path:', mobileBuildPath, 'exists:', fs.existsSync(mobileBuildPath));
   
-  // Serve dashboard at root
-  app.use('/', express.static(path.join(__dirname, '../dashboard/build')));
+  // Serve ALL mobile files under /mobile path
+  if (fs.existsSync(mobileBuildPath)) {
+    app.use('/mobile', express.static(mobileBuildPath, {
+      index: false,  // Don't auto-serve index.html for directories
+      fallthrough: true
+    }));
+    console.log('✅ Mobile static files configured at /mobile');
+  }
   
-  // Handle client-side routing
-  app.get('/dashboard/*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dashboard/build/index.html'));
+  // Serve ALL dashboard files at root (but not index.html automatically)
+  if (fs.existsSync(dashboardBuildPath)) {
+    app.use('/', express.static(dashboardBuildPath, {
+      index: false,  // Don't auto-serve index.html for directories
+      fallthrough: true
+    }));
+    console.log('✅ Dashboard static files configured at /');
+  }
+  
+  // Explicit HTML routes AFTER static file serving
+  app.get('/mobile', (req, res) => {
+    console.log('Serving mobile index.html');
+    res.sendFile(path.join(mobileBuildPath, 'index.html'));
   });
   
   app.get('/mobile/*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../mobile/build/index.html'));
+    console.log('Serving mobile index.html for path:', req.path);
+    res.sendFile(path.join(mobileBuildPath, 'index.html'));
   });
   
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dashboard/build/index.html'));
+  app.get('/', (req, res) => {
+    console.log('Serving dashboard index.html');
+    res.sendFile(path.join(dashboardBuildPath, 'index.html'));
   });
+  
+} else {
+  console.log('Running in development mode - static files not served');
 }
 
-// API routes
+// API routes (make sure these come AFTER static files but BEFORE catch-all)
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     environment: NODE_ENV,
-    players: gameState.currentGame.players.length,
-    gameState: gameState.currentGame.state
+    players: gameState.currentGame ? gameState.currentGame.players.length : 0,
+    gameState: gameState.currentGame ? gameState.currentGame.state : 'unknown'
   });
 });
 
 app.get('/api/game-info', (req, res) => {
   res.json({
     totalQuestions: questions.questions ? questions.questions.length : 0,
-    currentQuestion: gameState.currentGame.currentQuestionIndex,
-    gameState: gameState.currentGame.state,
-    playerCount: gameState.currentGame.players.length
+    currentQuestion: gameState.currentGame ? gameState.currentGame.currentQuestionIndex : 0,
+    gameState: gameState.currentGame ? gameState.currentGame.state : 'unknown',
+    playerCount: gameState.currentGame ? gameState.currentGame.players.length : 0
   });
 });
 
