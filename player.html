@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trivia Game - Player</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            font-size: 18px;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .hidden {
+            display: none;
+        }
+        input, button {
+            padding: 15px;
+            margin: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            width: 90%;
+            max-width: 300px;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .question {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border-radius: 8px;
+        }
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .option-btn {
+            padding: 15px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .option-btn:hover {
+            background-color: #0056b3;
+        }
+        .option-btn.selected {
+            background-color: #ffc107;
+            color: #000;
+        }
+        .timer {
+            font-size: 24px;
+            font-weight: bold;
+            color: #dc3545;
+            margin: 10px 0;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .player-info {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .scores {
+            text-align: left;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Trivia Game</h1>
+    
+    <!-- Connection Status -->
+    <div class="container">
+        <div id="connectionStatus" class="status disconnected">
+            Connecting to game...
+        </div>
+    </div>
+
+    <!-- Join Game -->
+    <div id="joinSection" class="container">
+        <h2>Join the Game</h2>
+        <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="20">
+        <br>
+        <button onclick="joinGame()">Join Game</button>
+    </div>
+
+    <!-- Game Lobby -->
+    <div id="lobbySection" class="container hidden">
+        <h2>🏁 Waiting for Game to Start</h2>
+        <div class="player-info">
+            <div>You: <strong id="playerName"></strong></div>
+            <div>Players joined: <span id="playerCount">0</span></div>
+        </div>
+        <p>Waiting for host to start the game...</p>
+    </div>
+
+    <!-- Question Section -->
+    <div id="questionSection" class="container hidden">
+        <div class="timer" id="timer"></div>
+        <div class="question" id="questionText"></div>
+        
+        <!-- Multiple Choice Options -->
+        <div id="multipleChoiceOptions" class="options hidden"></div>
+        
+        <!-- True/False Options -->
+        <div id="trueFalseOptions" class="options hidden">
+            <button class="option-btn" onclick="selectAnswer('true')">True</button>
+            <button class="option-btn" onclick="selectAnswer('false')">False</button>
+        </div>
+        
+        <!-- Text Input -->
+        <div id="textInputSection" class="hidden">
+            <input type="text" id="textAnswer" placeholder="Type your answer">
+            <br>
+            <button onclick="submitTextAnswer()">Submit Answer</button>
+        </div>
+        
+        <div id="answerSubmitted" class="hidden" style="color: #28a745; font-weight: bold; margin-top: 20px;">
+            ✅ Answer submitted!
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="container hidden">
+        <h2>📊 Question Results</h2>
+        <div id="correctAnswer"></div>
+        <div id="currentScores" class="scores"></div>
+        <p>Waiting for next question...</p>
+    </div>
+
+    <!-- Final Results -->
+    <div id="finalSection" class="container hidden">
+        <h2>🏆 Final Results</h2>
+        <div id="finalScores" class="scores"></div>
+        <p>Game completed! Waiting for host to start a new game...</p>
+    </div>
+
+    <script>
+        let ws = null;
+        let playerName = '';
+        let currentQuestion = null;
+        let selectedAnswer = null;
+        let timer = null;
+        let timeLeft = 0;
+
+        // Connect to WebSocket server
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:3001');
+            
+            ws.onopen = function() {
+                updateConnectionStatus(true);
+                console.log('Connected to server');
+            };
+            
+            ws.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                handleServerMessage(message);
+            };
+            
+            ws.onclose = function() {
+                updateConnectionStatus(false);
+                console.log('Disconnected from server');
+                // Try to reconnect after 3 seconds
+                setTimeout(connectWebSocket, 3000);
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        // Handle messages from server
+        function handleServerMessage(message) {
+            const { event, data } = message;
+            
+            switch(event) {
+                case 'game_state':
+                    if (data.state === 'lobby') {
+                        showSection('lobbySection');
+                        hideSection('joinSection');
+                        hideSection('questionSection');
+                        hideSection('resultsSection');
+                        hideSection('finalSection');
+                        updatePlayerCount(data.players.length);
+                    } else if (data.state === 'in_progress') {
+                        showSection('lobbySection');
+                        hideSection('questionSection');
+                        hideSection('resultsSection');
+                        hideSection('finalSection');
+                    }
+                    break;
+                    
+                case 'question':
+                    displayQuestion(data.question, data.timeLimit);
+                    break;
+                    
+                case 'question_results':
+                    showResults(data.correctAnswer, data.scores);
+                    break;
+                    
+                case 'final_results':
+                    showFinalResults(data.finalScores);
+                    break;
+                    
+                case 'error':
+                    alert(data.message);
+                    break;
+                    
+                default:
+                    console.log('Unhandled event:', event, data);
+            }
+        }
+
+        // Join game
+        function joinGame() {
+            const nameInput = document.getElementById('playerNameInput');
+            playerName = nameInput.value.trim();
+            
+            if (!playerName) {
+                alert('Please enter your name');
+                return;
+            }
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    event: 'join_game',
+                    data: { playerName }
+                }));
+                document.getElementById('playerName').textContent = playerName;
+            } else {
+                alert('Not connected to server');
+            }
+        }
+
+        // Display question
+        function displayQuestion(question, timeLimit) {
+            currentQuestion = question;
+            selectedAnswer = null;
+            timeLeft = timeLimit;
+            
+            showSection('questionSection');
+            hideSection('lobbySection');
+            hideSection('resultsSection');
+            hideSection('answerSubmitted');
+            
+            document.getElementById('questionText').textContent = question.question;
+            
+            // Hide all answer sections first
+            hideSection('multipleChoiceOptions');
+            hideSection('trueFalseOptions');
+            hideSection('textInputSection');
+            
+            // Show appropriate answer section
+            if (question.type === 'multiple_choice') {
+                displayMultipleChoice(question.options);
+            } else if (question.type === 'true_false') {
+                showSection('trueFalseOptions');
+                // Reset button states
+                document.querySelectorAll('#trueFalseOptions .option-btn').forEach(btn => {
+                    btn.classList.remove('selected');
+                });
+            } else if (question.type === 'text_input') {
+                showSection('textInputSection');
+                document.getElementById('textAnswer').value = '';
+            }
+            
+            startTimer();
+        }
+
+        // Display multiple choice options
+        function displayMultipleChoice(options) {
+            const container = document.getElementById('multipleChoiceOptions');
+            container.innerHTML = '';
+            
+            options.forEach(option => {
+                const button = document.createElement('button');
+                button.className = 'option-btn';
+                button.textContent = option;
+                button.onclick = () => selectAnswer(option);
+                container.appendChild(button);
+            });
+            
+            showSection('multipleChoiceOptions');
+        }
+
+        // Select answer
+        function selectAnswer(answer) {
+            if (selectedAnswer !== null) return; // Already answered
+            
+            selectedAnswer = answer;
+            
+            // Update UI to show selection
+            if (currentQuestion.type === 'multiple_choice') {
+                document.querySelectorAll('#multipleChoiceOptions .option-btn').forEach(btn => {
+                    btn.classList.remove('selected');
+                    if (btn.textContent === answer) {
+                        btn.classList.add('selected');
+                    }
+                });
+            } else if (currentQuestion.type === 'true_false') {
+                document.querySelectorAll('#trueFalseOptions .option-btn').forEach(btn => {
+                    btn.classList.remove('selected');
+                    if (btn.textContent.toLowerCase() === answer.toLowerCase()) {
+                        btn.classList.add('selected');
+                    }
+                });
+            }
+            
+            // Submit answer
+            submitAnswer(answer);
+        }
+
+        // Submit text answer
+        function submitTextAnswer() {
+            const textAnswer = document.getElementById('textAnswer').value.trim();
+            if (textAnswer && selectedAnswer === null) {
+                selectAnswer(textAnswer);
+            }
+        }
+
+        // Submit answer to server
+        function submitAnswer(answer) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    event: 'submit_answer',
+                    data: {
+                        answer: answer,
+                        timestamp: Date.now()
+                    }
+                }));
+                
+                showSection('answerSubmitted');
+                stopTimer();
+            }
+        }
+
+        // Timer functions
+        function startTimer() {
+            updateTimerDisplay();
+            timer = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay();
+                
+                if (timeLeft <= 0) {
+                    stopTimer();
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        }
+
+        function updateTimerDisplay() {
+            const timerElement = document.getElementById('timer');
+            if (timeLeft > 0) {
+                timerElement.textContent = `⏰ ${timeLeft}s`;
+                timerElement.style.color = timeLeft <= 5 ? '#dc3545' : '#28a745';
+            } else {
+                timerElement.textContent = '⏰ Time\'s up!';
+                timerElement.style.color = '#dc3545';
+            }
+        }
+
+        // Show results
+        function showResults(correctAnswer, scores) {
+            showSection('resultsSection');
+            hideSection('questionSection');
+            
+            document.getElementById('correctAnswer').innerHTML = 
+                `<strong>Correct Answer:</strong> ${correctAnswer}`;
+            
+            // Sort scores and display
+            const sortedScores = scores.sort((a, b) => b.score - a.score);
+            const scoresHtml = sortedScores.map((player, index) => {
+                const isMe = player.name === playerName;
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                return `<div style="${isMe ? 'font-weight: bold; background-color: #fff3cd; padding: 5px; border-radius: 4px;' : ''}">
+                    ${medal} ${player.name}: ${player.score} points
+                </div>`;
+            }).join('');
+            
+            document.getElementById('currentScores').innerHTML = scoresHtml;
+        }
+
+        // Show final results
+        function showFinalResults(scores) {
+            showSection('finalSection');
+            hideSection('questionSection');
+            hideSection('resultsSection');
+            
+            const sortedScores = scores.sort((a, b) => b.score - a.score);
+            const scoresHtml = sortedScores.map((player, index) => {
+                const isMe = player.name === playerName;
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                return `<div style="${isMe ? 'font-weight: bold; background-color: #fff3cd; padding: 5px; border-radius: 4px;' : ''}">
+                    ${medal} ${player.name}: ${player.score} points
+                </div>`;
+            }).join('');
+            
+            document.getElementById('finalScores').innerHTML = scoresHtml;
+        }
+
+        // UI helpers
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('connectionStatus');
+            if (connected) {
+                status.textContent = '✅ Connected to game';
+                status.className = 'status connected';
+            } else {
+                status.textContent = '❌ Connection lost - Reconnecting...';
+                status.className = 'status disconnected';
+                // Reset to join screen on disconnect
+                showSection('joinSection');
+                hideSection('lobbySection');
+                hideSection('questionSection');
+                hideSection('resultsSection');
+                hideSection('finalSection');
+            }
+        }
+
+        function updatePlayerCount(count) {
+            document.getElementById('playerCount').textContent = count;
+        }
+
+        function showSection(sectionId) {
+            document.getElementById(sectionId).classList.remove('hidden');
+        }
+
+        function hideSection(sectionId) {
+            document.getElementById(sectionId).classList.add('hidden');
+        }
+
+        // Initialize
+        connectWebSocket();
+        
+        // Handle Enter key in player name input
+        document.getElementById('playerNameInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                joinGame();
+            }
+        });
+        
+        // Handle Enter key in text answer input
+        document.getElementById('textAnswer').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                submitTextAnswer();
+            }
+        });
+    </script>
+</body>
+</html>

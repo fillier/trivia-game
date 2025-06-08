@@ -1,0 +1,14 @@
+{
+  "hostCode": "ADMIN123",
+  "gameSettings": {
+    "questionTimer": 30,
+    "showScores": true
+  },
+  "currentGame": {
+    "state": "lobby",
+    "currentQuestionIndex": 0,
+    "questionStartTime": null,
+    "players": [],
+    "currentAnswers": []
+  }
+}

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trivia Game - Host Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .hidden {
+            display: none;
+        }
+        input, button {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .player-list {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .question-display {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .answers-count {
+            font-weight: bold;
+            color: #28a745;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Trivia Game - Host Dashboard</h1>
+    
+    <!-- Connection Status -->
+    <div class="container">
+        <div id="connectionStatus" class="status disconnected">
+            Disconnected from server
+        </div>
+    </div>
+
+    <!-- Host Authentication -->
+    <div id="authSection" class="container">
+        <h2>Host Authentication</h2>
+        <input type="password" id="hostCodeInput" placeholder="Enter host code" value="ADMIN123">
+        <button onclick="authenticate()">Connect as Host</button>
+    </div>
+
+    <!-- Game Lobby -->
+    <div id="lobbySection" class="container hidden">
+        <h2>Game Lobby</h2>
+        <div class="player-list">
+            <h3>Players Joined: <span id="playerCount">0</span></h3>
+            <div id="playersList"></div>
+        </div>
+        <button onclick="startGame()" id="startGameBtn">Start Game</button>
+    </div>
+
+    <!-- Game Control -->
+    <div id="gameSection" class="container hidden">
+        <h2>Game Control</h2>
+        <div class="question-display">
+            <h3>Current Question:</h3>
+            <div id="currentQuestion">No question loaded</div>
+        </div>
+        <div class="answers-count">
+            Answers received: <span id="answersCount">0</span> / <span id="totalPlayers">0</span>
+        </div>
+        <button onclick="nextQuestion()" id="nextQuestionBtn">Next Question</button>
+        <button onclick="showResults()" id="showResultsBtn" disabled>Show Results</button>
+        <button onclick="endGame()" id="endGameBtn" style="background-color: #dc3545;">End Game</button>
+    </div>
+
+    <!-- Game Results -->
+    <div id="resultsSection" class="container hidden">
+        <h2>Game Results</h2>
+        <div id="finalScores"></div>
+        <button onclick="resetGame()">Reset Game</button>
+    </div>
+
+    <script>
+        let ws = null;
+        let isAuthenticated = false;
+        let currentQuestionIndex = 0;
+        let totalQuestions = 0;
+
+        // Connect to WebSocket server
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:3001');
+            
+            ws.onopen = function() {
+                updateConnectionStatus(true);
+                console.log('Connected to server');
+            };
+            
+            ws.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                handleServerMessage(message);
+            };
+            
+            ws.onclose = function() {
+                updateConnectionStatus(false);
+                console.log('Disconnected from server');
+                // Try to reconnect after 3 seconds
+                setTimeout(connectWebSocket, 3000);
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        // Handle messages from server
+        function handleServerMessage(message) {
+            const { event, data } = message;
+            
+            switch(event) {
+                case 'host_authenticated':
+                    if (data.success) {
+                        isAuthenticated = true;
+                        showSection('lobbySection');
+                        hideSection('authSection');
+                    } else {
+                        alert('Invalid host code');
+                    }
+                    break;
+                    
+                case 'players_update':
+                    updatePlayersList(data.players);
+                    break;
+                    
+                case 'answers_update':
+                    updateAnswersCount(data.answers.length, data.totalPlayers);
+                    document.getElementById('showResultsBtn').disabled = false;
+                    break;
+                    
+                case 'game_ended':
+                    showFinalResults(data.finalScores);
+                    break;
+                    
+                default:
+                    console.log('Unhandled event:', event, data);
+            }
+        }
+
+        // Authentication
+        function authenticate() {
+            const hostCode = document.getElementById('hostCodeInput').value;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    event: 'host_auth',
+                    data: { hostCode }
+                }));
+            } else {
+                alert('Not connected to server');
+            }
+        }
+
+        // Game controls
+        function startGame() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    event: 'start_game',
+                    data: {}
+                }));
+                showSection('gameSection');
+                hideSection('lobbySection');
+                currentQuestionIndex = 0;
+            }
+        }
+
+        function nextQuestion() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    event: 'next_question',
+                    data: {}
+                }));
+                currentQuestionIndex++;
+                document.getElementById('currentQuestion').innerHTML = `Question ${currentQuestionIndex} sent to players`;
+                document.getElementById('answersCount').textContent = '0';
+                document.getElementById('showResultsBtn').disabled = true;
+            }
+        }
+
+        function showResults() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    event: 'show_results',
+                    data: {}
+                }));
+                document.getElementById('currentQuestion').innerHTML = 'Results shown to players';
+                document.getElementById('showResultsBtn').disabled = true;
+            }
+        }
+
+        function endGame() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    event: 'end_game',
+                    data: {}
+                }));
+            }
+        }
+
+        function resetGame() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    event: 'reset_game',
+                    data: {}
+                }));
+                showSection('lobbySection');
+                hideSection('gameSection');
+                hideSection('resultsSection');
+                currentQuestionIndex = 0;
+                document.getElementById('playersList').innerHTML = '';
+                document.getElementById('playerCount').textContent = '0';
+            }
+        }
+
+        // UI helpers
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('connectionStatus');
+            if (connected) {
+                status.textContent = 'Connected to server';
+                status.className = 'status connected';
+            } else {
+                status.textContent = 'Disconnected from server';
+                status.className = 'status disconnected';
+                isAuthenticated = false;
+                showSection('authSection');
+                hideSection('lobbySection');
+                hideSection('gameSection');
+                hideSection('resultsSection');
+            }
+        }
+
+        function updatePlayersList(players) {
+            const playersList = document.getElementById('playersList');
+            const playerCount = document.getElementById('playerCount');
+            
+            playerCount.textContent = players.length;
+            document.getElementById('totalPlayers').textContent = players.length;
+            
+            playersList.innerHTML = players.map(player => 
+                `<div>👤 ${player.name} (Score: ${player.score})</div>`
+            ).join('');
+            
+            document.getElementById('startGameBtn').disabled = players.length === 0;
+        }
+
+        function updateAnswersCount(answers, total) {
+            document.getElementById('answersCount').textContent = answers;
+            document.getElementById('totalPlayers').textContent = total;
+        }
+
+        function showSection(sectionId) {
+            document.getElementById(sectionId).classList.remove('hidden');
+        }
+
+        function hideSection(sectionId) {
+            document.getElementById(sectionId).classList.add('hidden');
+        }
+
+        function showFinalResults(finalScores) {
+            showSection('resultsSection');
+            hideSection('gameSection');
+            
+            const sortedScores = finalScores.sort((a, b) => b.score - a.score);
+            const scoresHtml = sortedScores.map((player, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                return `<div>${medal} ${player.name}: ${player.score} points</div>`;
+            }).join('');
+            
+            document.getElementById('finalScores').innerHTML = `
+                <h3>🏆 Final Results:</h3>
+                ${scoresHtml}
+            `;
+        }
+
+        // Initialize
+        connectWebSocket();
+        
+        // Handle Enter key in host code input
+        document.getElementById('hostCodeInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                authenticate();
+            }
+        });
+    </script>
+</body>
+</html>
